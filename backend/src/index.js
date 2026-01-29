@@ -1,7 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const logger = require('./config/logger');
+const loggerService = require('./services/LoggerService');
+const requestLogger = require('./middleware/requestLogger');
 const errorHandler = require('./middleware/errorHandler');
 const authRoutes = require('./routes/auth');
 const notesRoutes = require('./routes/notes');
@@ -17,11 +18,8 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Request logging middleware
-app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.path}`);
-  next();
-});
+// Request logging middleware (logs all incoming requests with timing)
+app.use(requestLogger.middleware());
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -29,24 +27,36 @@ app.use('/api/notes', notesRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'Server is running' });
+  res.json({ 
+    status: 'Server is running',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: 'Route not found'
+    error: {
+      code: 'NOT_FOUND',
+      message: 'Route not found',
+      statusCode: 404,
+      requestId: req.id
+    }
   });
 });
 
-// Global error handler
-app.use(errorHandler);
+// Global error handler (logs all errors and sends standardized response)
+app.use(errorHandler.middleware());
 
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  logger.info(`✅ Server running on http://localhost:${PORT}`);
+  loggerService.info(`✅ Server started successfully`, {
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString()
+  });
 });
 
 module.exports = app;
